@@ -1,10 +1,15 @@
 #' @importFrom stringr str_match
 #' @importFrom stringr str_extract
 #' @importFrom dplyr bind_rows
-#' @importFrom dplyr as_data_frame
+#' @importFrom dplyr as_tibble
 #' @importFrom stats complete.cases
 
 bib2df_gather <- function(bib) {
+
+  blank_lines <- which(nchar(bib) == 0)
+  if(length(blank_lines))
+    bib <- bib[-blank_lines]
+
   from <- which(str_extract(bib, "[:graph:]") == "@")
   to  <- c(from[-1] - 1, length(bib))
   if (!length(from)) {
@@ -13,22 +18,27 @@ bib2df_gather <- function(bib) {
   itemslist <- mapply(
     function(x, y) return(bib[x:y]),
     x = from,
-    y = to - 1,
+    y = to ,
     SIMPLIFY = FALSE
-    )
+  )
+
+  itemslist <- lapply(itemslist, remove_entry_newlines)
+
   keys <- lapply(itemslist,
                  function(x) {
                    str_extract(x[1], "(?<=\\{)[^,]+")
                  }
   )
-  fields <- lapply(itemslist,
+  ## get the type of bib entry e.g. book, article, chapter etc
+  categories <- lapply(itemslist,
                    function(x) {
                      str_extract(x[1], "(?<=@)[^\\{]+")
                    }
   )
-  fields <- lapply(fields, toupper)
+  categories <- lapply(categories, toupper)
 
-  categories <- lapply(itemslist,
+
+  fields <- lapply(itemslist,
                        function(x) {
                          str_extract(x, "[:graph:]+")
                        }
@@ -38,7 +48,7 @@ bib2df_gather <- function(bib) {
 
   dupl <- sum(
     unlist(
-      lapply(categories, function(x) sum(duplicated(x[!is.na(x)])))
+      lapply(fields, function(x) sum(duplicated(x[!is.na(x)])))
     )
   )
 
@@ -54,33 +64,15 @@ bib2df_gather <- function(bib) {
                      str_extract(x, "(?<==).*")
                    }
   )
+
   values <- lapply(values,
                    function(x) {
-                     str_extract(x, "(?![\"\\{\\s]).*")
+                     sapply(x, text_between_curly_brackets, simplify = TRUE, USE.NAMES = FALSE)
                    }
   )
-  values <- lapply(values,
-                   function(x) {
-                     gsub("?(^[\\{\"])", "", x)
-                   }
-  )
-  values <- lapply(values,
-                   function(x) {
-                     gsub("?([\\}\"]\\,$)", "", x)
-                   }
-  )
-  values <- lapply(values,
-                   function(x) {
-                     gsub("?([\\}\"]$)", "", x)
-                   }
-  )
-  values <- lapply(values,
-                   function(x) {
-                     gsub("?(\\,$)", "", x)
-                   }
-  )
+
   values <- lapply(values, trimws)
-  items <- mapply(cbind, categories, values, SIMPLIFY = FALSE)
+  items <- mapply(cbind, fields, values, SIMPLIFY = FALSE)
   items <- lapply(items,
                   function(x) {
                     x <- cbind(toupper(x[, 1]), x[, 2])
@@ -93,8 +85,8 @@ bib2df_gather <- function(bib) {
   )
   items <- mapply(function(x, y) {
     rbind(x, c("CATEGORY", y))
-    },
-    x = items, y = fields, SIMPLIFY = FALSE)
+  },
+  x = items, y = categories, SIMPLIFY = FALSE)
 
   items <- lapply(items, t)
   items <- lapply(items,
@@ -112,7 +104,7 @@ bib2df_gather <- function(bib) {
                   }
   )
   dat <- bind_rows(c(list(empty), items))
-  dat <- as_data_frame(dat)
+  dat <- as_tibble(dat)
   dat$BIBTEXKEY <- unlist(keys)
   dat
 }
