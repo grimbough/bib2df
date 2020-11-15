@@ -6,10 +6,6 @@
 
 bib2df_gather <- function(bib) {
 
-  blank_lines <- which(nchar(bib) == 0)
-  if(length(blank_lines))
-    bib <- bib[-blank_lines]
-
   from <- which(str_extract(bib, "[:graph:]") == "@")
   to  <- c(from[-1] - 1, length(bib))
   if (!length(from)) {
@@ -40,7 +36,7 @@ bib2df_gather <- function(bib) {
 
   fields <- lapply(itemslist,
                        function(x) {
-                         str_extract(x, "[:graph:]+")
+                         str_extract(x, "[[:alnum:]_-]+")
                        }
   )
 
